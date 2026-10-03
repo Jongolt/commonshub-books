@@ -161,23 +161,28 @@ def stripe_summary():
     }
 
 
+INDIVIDUAL = "Private individual"
+
+
 def vendor_label(bill):
     vendor = bill.get("vendor") or {}
     if vendor.get("type") == "individual" or not vendor.get("name"):
-        return "individual"
+        return INDIVIDUAL
     return vendor["name"]
 
 
 def what_label(bill):
-    if vendor_label(bill) == "individual":
-        return "individual"
+    if vendor_label(bill) == INDIVIDUAL:
+        return "Name withheld in the open data"
     line = ""
     lines = bill.get("lines") or []
     if lines:
         line = first_line(lines[0].get("description") or "")
     if not line:
         line = first_line(bill.get("description") or "")
-    return line or vendor_label(bill)
+    if not line.strip("? ."):
+        return "No description on the bill"
+    return line
 
 
 DESK_PAGE = """<!DOCTYPE html>
@@ -280,7 +285,9 @@ const data = JSON.parse(document.getElementById("data").textContent);
 const list = document.getElementById("list");
 const slip = document.getElementById("slip");
 const q = document.getElementById("q");
+const ASIDE_KEY = "chb_aside";
 let current = null;
+let aside = readAside();
 
 function money(amount, currency) {
   const sign = amount < 0 ? "-" : "";
@@ -308,6 +315,34 @@ function pickDefault(bills) {
   return ranked[0] || null;
 }
 
+function billKey(bill) {
+  return bill.number + "|" + bill.amount + "|" + bill.due;
+}
+
+function readAside() {
+  try {
+    const raw = JSON.parse(sessionStorage.getItem(ASIDE_KEY) || "[]");
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch (err) {
+    return new Set();
+  }
+}
+
+function writeAside() {
+  try {
+    sessionStorage.setItem(ASIDE_KEY, JSON.stringify(Array.from(aside)));
+  } catch (err) {}
+}
+
+function nextBill() {
+  if (!current) return;
+  aside.add(billKey(current));
+  writeAside();
+  const left = filtered().filter((bill) => !aside.has(billKey(bill)));
+  current = pickDefault(left.filter((bill) => bill.lane === "pay")) || pickDefault(left);
+  renderList();
+}
+
 function renderSlip(bill) {
   if (!bill) {
     slip.innerHTML = "<p class='hint'>No bill matches.</p>";
@@ -327,6 +362,7 @@ function renderSlip(bill) {
     "<div class='actions'>" +
     "<button type='button' id='copy'>Copy reference</button>" +
     "<a href='https://commonshub.brussels/donate'>Pay the Hub</a>" +
+    "<button type='button' class='ghost' id='next'>Next bill</button>" +
     "</div>" +
     "<p class='hint'>" + (bill.lane === "check" ? "Confirm the debit left before you send this reference." : "Put the reference in the donation message.") + "</p>";
   document.getElementById("copy").addEventListener("click", async () => {
@@ -338,13 +374,14 @@ function renderSlip(bill) {
       button.textContent = "Select the reference";
     }
   });
+  document.getElementById("next").addEventListener("click", nextBill);
 }
 
 function sameBill(a, b) {
   return a && b && a.number === b.number && a.amount === b.amount && a.due === b.due;
 }
 
-function renderGroup(title, note, bills) {
+function renderGroup(title, note, bills, restore) {
   const head = document.createElement("p");
   head.className = "lane";
   head.textContent = title;
@@ -375,6 +412,10 @@ function renderGroup(title, note, bills) {
       "<span class='what'>" + escapeHtml(bill.what) + "</span>" +
       "<span class='days" + (bill.days >= 90 ? " late" : "") + "'>" + escapeHtml(daysLabel(bill.days)) + "</span>";
     button.addEventListener("click", () => {
+      if (restore) {
+        aside.delete(billKey(bill));
+        writeAside();
+      }
       current = bill;
       renderList();
     });
@@ -386,7 +427,11 @@ function renderGroup(title, note, bills) {
 
 function renderList() {
   const bills = filtered();
-  if (!bills.some((bill) => sameBill(current, bill))) current = pickDefault(bills.filter((bill) => bill.lane === "pay")) || pickDefault(bills);
+  const active = bills.filter((bill) => !aside.has(billKey(bill)));
+  const held = bills.filter((bill) => aside.has(billKey(bill)));
+  if (!bills.some((bill) => sameBill(current, bill))) {
+    current = pickDefault(active.filter((bill) => bill.lane === "pay")) || pickDefault(active) || pickDefault(held);
+  }
   list.innerHTML = "";
   if (!bills.length) {
     const item = document.createElement("p");
@@ -394,8 +439,11 @@ function renderList() {
     item.textContent = "No bill matches.";
     list.appendChild(item);
   } else {
-    renderGroup("Pay next", "", bills.filter((bill) => bill.lane === "pay"));
-    renderGroup("Check first", "A direct debit can already have left. The bill stays open until it is reconciled.", bills.filter((bill) => bill.lane === "check"));
+    renderGroup("Pay next", "", active.filter((bill) => bill.lane === "pay"));
+    renderGroup("Check first", "A direct debit can already have left. The bill stays open until it is reconciled.", active.filter((bill) => bill.lane === "check"));
+    if (held.length) {
+      renderGroup("Set aside", "Skipped in this browser only. The Hub books are unchanged.", held, true);
+    }
   }
   renderSlip(current);
 }
@@ -404,7 +452,9 @@ function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-document.getElementById("asof").textContent = "Open bills as of " + data.asOf;
+document.getElementById("asof").textContent =
+  money(data.open.EUR.due, "EUR") + " still open across " + data.open.EUR.count + " euro bills. " +
+  money(data.open.USD.due, "USD") + " still open across " + data.open.USD.count + " dollar bills. As of " + data.asOf + ".";
 q.addEventListener("input", renderList);
 renderList();
 
@@ -463,6 +513,16 @@ def build():
         "billsGeneratedAt": bills_payload["generatedAt"],
         "stripeGeneratedAt": stripe["generatedAt"],
         "bills": packed,
+        "open": {
+            "EUR": {
+                "count": bills_payload["totalsByCurrency"]["EUR"]["count"],
+                "due": bills_payload["totalsByCurrency"]["EUR"]["amountDue"],
+            },
+            "USD": {
+                "count": bills_payload["totalsByCurrency"]["USD"]["count"],
+                "due": bills_payload["totalsByCurrency"]["USD"]["amountDue"],
+            },
+        },
         "stripe": {
             "gross": round(charge["gross"], 2),
             "fee": round(charge["fee"], 2),
