@@ -23,21 +23,23 @@ LOGIN_PAGE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · Commons Hub books</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f3f0e8; color: #1c1915; font: 16px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #e7ebf0; color: #14181f; font: 16px/1.45 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
   main { width: min(380px, calc(100% - 32px)); }
   h1 { font-size: 28px; font-weight: 650; letter-spacing: -0.03em; margin: 0 0 8px; }
-  p { margin: 0 0 20px; color: #3f3a33; }
+  p { margin: 0 0 20px; color: #3e4856; }
   form { display: grid; gap: 12px; }
   label { display: grid; gap: 6px; font-size: 14px; }
-  input { font: inherit; padding: 10px 12px; border: 1px solid #cfc6b8; border-radius: 8px; background: #fffdf8; color: inherit; }
+  input { font: inherit; padding: 10px 12px; border: 1px solid #cfd6e0; border-radius: 8px; background: #f7f8fa; color: inherit; }
   input:focus { outline: 2px solid #1c1915; outline-offset: 2px; }
-  button { font: inherit; margin-top: 4px; padding: 10px 14px; border: 0; border-radius: 8px; background: #1c1915; color: #f3f0e8; cursor: pointer; }
-  button:hover { background: #3a342c; }
+  button { font: inherit; margin-top: 4px; padding: 10px 14px; border: 0; border-radius: 8px; background: #16324f; color: #f4f7fb; cursor: pointer; }
+  button:hover { background: #10263c; }
   button:active { transform: scale(0.98); }
   button:disabled { opacity: 0.6; cursor: wait; }
   .err { min-height: 1.45em; margin: 0; color: #8a3a1e; font-size: 14px; }
-  ::selection { background: #e4d3a8; color: #1c1915; }
+  ::selection { background: #d5e0ec; color: #14181f; }
   @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
 </head>
@@ -178,178 +180,298 @@ def what_label(bill):
     return line or vendor_label(bill)
 
 
-def build():
-    bills_payload = load_bills()
-    stripe = stripe_summary()
-    as_of = date.fromisoformat(bills_payload["generatedAt"][:10])
-    bills = bills_payload["bills"]
-    eur = [b for b in bills if b.get("currency") == "EUR"]
-    usd = [b for b in bills if b.get("currency") == "USD"]
-    eur.sort(key=lambda b: -(b.get("amountDue") or 0))
-    usd.sort(key=lambda b: -(b.get("amountDue") or 0))
-
-    by_vendor = defaultdict(lambda: {"n": 0, "due": 0.0})
-    for bill in eur:
-        name = vendor_label(bill)
-        if name == "individual":
-            continue
-        by_vendor[name]["n"] += 1
-        by_vendor[name]["due"] += bill.get("amountDue") or 0
-    vendor_rows = sorted(by_vendor.items(), key=lambda item: -item[1]["due"])
-
-    def bill_rows(items, currency):
-        lines = []
-        for bill in items:
-            due = bill.get("dueDate") or ""
-            overdue = ""
-            late = ""
-            if due:
-                y, m, d = map(int, due.split("-"))
-                days = (as_of - date(y, m, d)).days
-                overdue = str(days)
-                if days >= 90:
-                    late = " late"
-            lines.append(
-                "<tr>"
-                f"<td class='keep'>{escape(due)}</td>"
-                f"<td class='num keep{late}'>{overdue}</td>"
-                f"<td>{escape(vendor_label(bill))}</td>"
-                f"<td>{escape(what_label(bill))}</td>"
-                f"<td class='num'>{money(bill.get('amountDue') or 0, currency)}</td>"
-                f"<td><code>{escape(bill.get('number') or '')}</code></td>"
-                "</tr>"
-            )
-        return "\n".join(lines)
-
-    vendor_html = []
-    for name, bucket in vendor_rows:
-        if bucket["due"] < 100:
-            continue
-        vendor_html.append(
-            "<tr>"
-            f"<td>{escape(name)}</td>"
-            f"<td class='num'>{bucket['n']}</td>"
-            f"<td class='num'>{money(bucket['due'])}</td>"
-            "</tr>"
-        )
-
-    max_net = max((stripe["by_month"][m]["net"] for m in stripe["months"]), default=1) or 1
-    bars = []
-    for month in stripe["months"]:
-        net = stripe["by_month"][month]["net"]
-        width = max(2, round(net / max_net * 100)) if net > 0 else 2
-        mark = " current" if stripe["status"].get(month) == "current" else ""
-        label = month + (" (open)" if stripe["status"].get(month) == "current" else "")
-        bars.append(
-            "<div class='month'>"
-            f"<span class='mname'>{escape(label)}</span>"
-            f"<span class='track'><span class='fill{mark}' style='width:{width}%'></span></span>"
-            f"<span class='mnet'>{money(net)}</span>"
-            "</div>"
-        )
-
-    charge = stripe["charge"]
-    eur_due = bills_payload["totalsByCurrency"]["EUR"]["amountDue"]
-    usd_due = bills_payload["totalsByCurrency"]["USD"]["amountDue"]
-    generated = bills_payload["generatedAt"]
-
-    html = f"""<!DOCTYPE html>
+DESK_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Commons Hub books</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-  body {{ margin: 0; background: #f3f0e8; color: #1c1915; font: 16px/1.45 ui-sans-serif, system-ui, sans-serif; }}
-  main {{ max-width: 980px; margin: 0 auto; padding: 40px 20px 64px; }}
-  h1 {{ font-size: 32px; font-weight: 650; letter-spacing: -0.03em; margin: 0 0 8px; }}
-  h2 {{ font-size: 18px; margin: 36px 0 12px; }}
-  p {{ margin: 0 0 12px; }}
-  .lede {{ max-width: 68ch; color: #3f3a33; }}
-  .figures {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 28px; }}
-  .figure {{ background: #fffdf8; border: 1px solid #e2dcd0; border-radius: 12px; padding: 14px 14px 12px; }}
-  .figure span {{ display: block; color: #6d665c; font-size: 13px; }}
-  .figure strong {{ display: block; margin-top: 6px; font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }}
-  .wrap {{ overflow-x: auto; border: 1px solid #e2dcd0; border-radius: 12px; }}
-  table {{ width: 100%; border-collapse: collapse; background: #fffdf8; }}
-  td.keep, th.keep, code {{ white-space: nowrap; }}
-  th, td {{ text-align: left; padding: 8px 10px; border-bottom: 1px solid #efeae1; font-variant-numeric: tabular-nums; vertical-align: top; }}
-  th {{ font-size: 12px; color: #6d665c; font-weight: 600; }}
-  td.num, th.num {{ text-align: right; }}
-  tr:last-child td {{ border-bottom: 0; }}
-  code {{ font-size: 12px; }}
-  .chart {{ background: #fffdf8; border: 1px solid #e2dcd0; border-radius: 12px; padding: 8px 12px; }}
-  .month {{ display: grid; grid-template-columns: 108px 1fr 110px; gap: 10px; align-items: center; padding: 3px 0; }}
-  .mname, .mnet {{ font-size: 13px; font-variant-numeric: tabular-nums; }}
-  .mnet {{ text-align: right; }}
-  .track {{ height: 8px; background: #efeae1; border-radius: 99px; }}
-  .fill {{ display: block; height: 8px; background: #1f6b4a; border-radius: 99px; }}
-  .fill.current {{ background: #c4a15a; }}
-  .note {{ margin-top: 28px; color: #6d665c; font-size: 14px; max-width: 70ch; }}
-  .session {{ margin: 0 0 12px; text-align: right; font-size: 14px; }}
-  td.late {{ color: #8a3a1e; }}
-  a {{ color: inherit; }}
-  @media (max-width: 720px) {{
-    .figures {{ grid-template-columns: 1fr 1fr; }}
-  }}
+  :root {
+    --bg: #e7ebf0;
+    --ink: #14181f;
+    --muted: #3e4856;
+    --line: #cfd6e0;
+    --paper: #f7f8fa;
+    --action: #16324f;
+    --late: #8c341c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; }
+  a { color: inherit; }
+  button, input { font: inherit; color: inherit; }
+  ::selection { background: #d5e0ec; }
+  :focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 20px 24px 0; }
+  header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  header .out { margin-left: auto; font-size: 14px; }
+  .desk { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 420px); gap: 20px; padding: 20px 24px 48px; align-items: start; }
+  .queue, .slip, .cardbook { background: var(--paper); border: 1px solid var(--line); }
+  .queue { min-height: 420px; }
+  .bar { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .bar input { flex: 1; border: 1px solid var(--line); background: #fff; padding: 8px 10px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .lane { margin: 0; padding: 12px 12px 4px; font-size: 13px; color: var(--muted); }
+  .lane + .list { border-top: 1px solid var(--line); }
+  #list { max-height: 70vh; overflow: auto; }
+  .list button { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; cursor: pointer; }
+  .list button:hover { background: #eef2f6; }
+  .list button[aria-current="true"] { background: #e4ebf3; }
+  .list button:active { transform: scale(0.995); }
+  .who { font-weight: 500; }
+  .what, .meta { color: var(--muted); font-size: 13px; }
+  .amt { font-variant-numeric: tabular-nums; text-align: right; }
+  .days { font-variant-numeric: tabular-nums; text-align: right; font-size: 13px; }
+  .days.late { color: var(--late); }
+  .empty { padding: 16px 12px; color: var(--muted); }
+  .slip { position: sticky; top: 16px; padding: 20px; }
+  .slip .kicker { margin: 0; color: var(--muted); font-size: 13px; }
+  .slip h2 { margin: 8px 0 4px; font-size: 1.35rem; font-weight: 600; letter-spacing: -0.02em; }
+  .ref { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 1.05rem; margin: 16px 0; }
+  .slip dl { display: grid; grid-template-columns: 88px 1fr; gap: 6px 10px; margin: 0 0 16px; }
+  .slip dt { color: var(--muted); font-size: 13px; }
+  .slip dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .actions button, .actions a { background: var(--action); color: #f4f7fb; text-decoration: none; border: 0; padding: 10px 14px; cursor: pointer; }
+  .actions button:hover, .actions a:hover { background: #10263c; }
+  .actions button:active, .actions a:active { transform: scale(0.98); }
+  .actions .ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .hint { margin: 14px 0 0; color: var(--muted); font-size: 14px; max-width: 42ch; }
+  .cardbook { grid-column: 1 / -1; padding: 16px 20px 8px; }
+  .cardbook h2 { font-size: 1rem; margin: 0 0 6px; }
+  .cardbook p { margin: 0 0 12px; color: var(--muted); max-width: 70ch; }
+  .totals { display: flex; flex-wrap: wrap; gap: 16px 28px; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+  .totals span { display: block; color: var(--muted); font-size: 12px; }
+  .foot { grid-column: 1 / -1; color: var(--muted); font-size: 13px; max-width: 70ch; }
+  @media (max-width: 800px) {
+    header { flex-wrap: wrap; }
+    .desk { grid-template-columns: 1fr; padding: 16px; }
+    .slip { position: static; order: -1; }
+    .list { max-height: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .list button:active, .actions button:active, .actions a:active { transform: none; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <p class="session"><a href="/api/logout">Sign out</a></p>
+<header>
   <h1>Commons Hub books</h1>
-  <p class="lede">Open vendor bills, and the card payments that came in through Stripe. A bill stays on this list until the books are reconciled with the payment, so a direct debit can sit here after the money has already left.</p>
-  <section class="figures">
-    <div class="figure"><span>Still to pay, euro</span><strong>{money(eur_due)}</strong></div>
-    <div class="figure"><span>Euro bills</span><strong>{bills_payload['totalsByCurrency']['EUR']['count']}</strong></div>
-    <div class="figure"><span>Still to pay, dollar</span><strong>{money(usd_due, 'USD')}</strong></div>
-    <div class="figure"><span>Card charges, gross</span><strong>{money(charge['gross'])}</strong></div>
+  <p id="asof"></p>
+  <a class="out" href="/api/logout">Sign out</a>
+</header>
+<div class="desk">
+  <section class="queue">
+    <div class="bar">
+      <input id="q" type="search" placeholder="Vendor or reference" aria-label="Filter bills">
+    </div>
+    <div id="list"></div>
   </section>
+  <aside class="slip" id="slip"></aside>
+  <section class="cardbook" id="cardbook"></section>
+  <p class="foot" id="foot"></p>
+</div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const data = JSON.parse(document.getElementById("data").textContent);
+const list = document.getElementById("list");
+const slip = document.getElementById("slip");
+const q = document.getElementById("q");
+let current = null;
 
-  <h2>Who is owed</h2>
-  <p class="lede">Euro bills from companies, grouped. Private individuals are not named.</p>
-  <div class="wrap"><table>
-    <thead><tr><th>Vendor</th><th class="num">Bills</th><th class="num">Due</th></tr></thead>
-    <tbody>
-    {''.join(vendor_html)}
-    </tbody>
-  </table></div>
+function money(amount, currency) {
+  const sign = amount < 0 ? "-" : "";
+  const number = Math.abs(amount).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency === "USD" ? sign + "$" + number : sign + "€" + number;
+}
 
-  <h2>Euro bills</h2>
-  <p class="lede">Days are counted from the due date to {as_of.isoformat()}. To pay one, donate to the Hub and put the bill number in the message. Do not pay the vendor.</p>
-  <div class="wrap"><table>
-    <thead><tr><th>Due</th><th class="num">Days</th><th>Vendor</th><th>What</th><th class="num">Due amount</th><th>Reference</th></tr></thead>
-    <tbody>
-    {bill_rows(eur, "EUR")}
-    </tbody>
-  </table></div>
+function daysLabel(days) {
+  if (days === null || days === undefined) return "";
+  if (days < 0) return "due in " + Math.abs(days) + " days";
+  if (days === 0) return "due today";
+  return days + " days open";
+}
 
-  <h2>Dollar bills</h2>
-  <div class="wrap"><table>
-    <thead><tr><th>Due</th><th class="num">Days</th><th>Vendor</th><th>What</th><th class="num">Due amount</th><th>Reference</th></tr></thead>
-    <tbody>
-    {bill_rows(usd, "USD")}
-    </tbody>
-  </table></div>
+function filtered() {
+  const needle = q.value.trim().toLowerCase();
+  return data.bills.filter((bill) => {
+    if (!needle) return true;
+    return (bill.vendor + " " + bill.what + " " + bill.number).toLowerCase().includes(needle);
+  });
+}
 
-  <h2>Card payments</h2>
-  <p class="lede">Stripe charges from January 2024 through October 2026. October is still open. Payouts to the bank are the same money leaving Stripe, so they are not added again. This incoming money is not a payment of the bills above. Exact amounts of the large bills do not appear in the public transactions from March to October 2026.</p>
-  <section class="figures">
-    <div class="figure"><span>Card charges, gross</span><strong>{money(charge['gross'])}</strong></div>
-    <div class="figure"><span>Stripe fees on those charges</span><strong>{money(charge['fee'])}</strong></div>
-    <div class="figure"><span>Refunds</span><strong>{money(stripe['refund']['net'])}</strong></div>
-    <div class="figure"><span>Left after fees and refunds</span><strong>{money(stripe['net'])}</strong></div>
-  </section>
-  <div class="chart">
-    {''.join(bars)}
-  </div>
+function pickDefault(bills) {
+  const ranked = bills.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
+  return ranked[0] || null;
+}
 
-  <p class="note">Donate: <a href="https://commonshub.brussels/donate">commonshub.brussels/donate</a>. The message should be the bill reference from the table.</p>
-  <p class="note">Contains data from Commons Hub Brussels, available under the Open Database License (ODbL): <a href="{API}">{API}</a>. Bills generated at {escape(generated)}. Stripe rows generated at {escape(stripe['generatedAt'])}.</p>
-</main>
+function renderSlip(bill) {
+  if (!bill) {
+    slip.innerHTML = "<p class='hint'>No bill matches.</p>";
+    return;
+  }
+  const late = bill.days >= 90 ? " late" : "";
+  slip.innerHTML =
+    "<p class='kicker'>" + (bill.lane === "check" ? "Check before you pay" : "Pay the Hub, not the vendor") + "</p>" +
+    "<h2>" + escapeHtml(bill.vendor) + "</h2>" +
+    "<p class='what'>" + escapeHtml(bill.what) + "</p>" +
+    "<p class='ref' id='ref'>" + escapeHtml(bill.number) + "</p>" +
+    "<dl>" +
+    "<dt>Amount</dt><dd>" + money(bill.amount, bill.currency) + "</dd>" +
+    "<dt>Due</dt><dd>" + escapeHtml(bill.due || "no date") + "</dd>" +
+    "<dt>Age</dt><dd class='days" + late + "'>" + escapeHtml(daysLabel(bill.days)) + "</dd>" +
+    "</dl>" +
+    "<div class='actions'>" +
+    "<button type='button' id='copy'>Copy reference</button>" +
+    "<a href='https://commonshub.brussels/donate'>Pay the Hub</a>" +
+    "</div>" +
+    "<p class='hint'>" + (bill.lane === "check" ? "Confirm the debit left before you send this reference." : "Put the reference in the donation message.") + "</p>";
+  document.getElementById("copy").addEventListener("click", async () => {
+    const button = document.getElementById("copy");
+    try {
+      await navigator.clipboard.writeText(bill.number);
+      button.textContent = "Copied";
+    } catch (err) {
+      button.textContent = "Select the reference";
+    }
+  });
+}
+
+function sameBill(a, b) {
+  return a && b && a.number === b.number && a.amount === b.amount && a.due === b.due;
+}
+
+function renderGroup(title, note, bills) {
+  const head = document.createElement("p");
+  head.className = "lane";
+  head.textContent = title;
+  list.appendChild(head);
+  if (note) {
+    const extra = document.createElement("p");
+    extra.className = "what";
+    extra.style.padding = "0 12px 8px";
+    extra.textContent = note;
+    list.appendChild(extra);
+  }
+  const group = document.createElement("ul");
+  group.className = "list";
+  if (!bills.length) {
+    const item = document.createElement("li");
+    item.className = "empty";
+    item.textContent = "None.";
+    group.appendChild(item);
+  }
+  for (const bill of bills) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    if (sameBill(current, bill)) button.setAttribute("aria-current", "true");
+    button.innerHTML =
+      "<span class='who'>" + escapeHtml(bill.vendor) + "</span>" +
+      "<span class='amt'>" + money(bill.amount, bill.currency) + "</span>" +
+      "<span class='what'>" + escapeHtml(bill.what) + "</span>" +
+      "<span class='days" + (bill.days >= 90 ? " late" : "") + "'>" + escapeHtml(daysLabel(bill.days)) + "</span>";
+    button.addEventListener("click", () => {
+      current = bill;
+      renderList();
+    });
+    item.appendChild(button);
+    group.appendChild(item);
+  }
+  list.appendChild(group);
+}
+
+function renderList() {
+  const bills = filtered();
+  if (!bills.some((bill) => sameBill(current, bill))) current = pickDefault(bills.filter((bill) => bill.lane === "pay")) || pickDefault(bills);
+  list.innerHTML = "";
+  if (!bills.length) {
+    const item = document.createElement("p");
+    item.className = "empty";
+    item.textContent = "No bill matches.";
+    list.appendChild(item);
+  } else {
+    renderGroup("Pay next", "", bills.filter((bill) => bill.lane === "pay"));
+    renderGroup("Check first", "A direct debit can already have left. The bill stays open until it is reconciled.", bills.filter((bill) => bill.lane === "check"));
+  }
+  renderSlip(current);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+document.getElementById("asof").textContent = "Open bills as of " + data.asOf;
+q.addEventListener("input", renderList);
+renderList();
+
+const stripe = data.stripe;
+document.getElementById("cardbook").innerHTML =
+  "<h2>Card book</h2>" +
+  "<p>Public Stripe charges from January 2024 through October 2026. Payouts to the bank are the same money leaving Stripe, so they are not counted again. This money does not close the bills on the desk.</p>" +
+  "<div class='totals'>" +
+  "<div><span>Gross</span>" + money(stripe.gross, "EUR") + "</div>" +
+  "<div><span>Fees</span>" + money(stripe.fee, "EUR") + "</div>" +
+  "<div><span>Refunds</span>" + money(stripe.refund, "EUR") + "</div>" +
+  "<div><span>Left</span>" + money(stripe.net, "EUR") + "</div>" +
+  "</div>";
+document.getElementById("foot").innerHTML =
+  "Contains data from Commons Hub Brussels, available under the Open Database License (ODbL): <a href='https://commonshub.brussels/opendata'>commonshub.brussels/opendata</a>. Bills generated at " +
+  escapeHtml(data.billsGeneratedAt) + ". Stripe rows generated at " + escapeHtml(data.stripeGeneratedAt) + ".";
+</script>
 </body>
 </html>
 """
+
+
+def build():
+    bills_payload = load_bills()
+    stripe = stripe_summary()
+    as_of = date.fromisoformat(bills_payload["generatedAt"][:10])
+    bills = bills_payload["bills"]
+    CHECK_VENDORS = {"Proximus SA de droit public", "KBC Bank NV"}
+
+    def pack(bill):
+        due = bill.get("dueDate") or ""
+        days = None
+        if due:
+            y, m, d = map(int, due.split("-"))
+            days = (as_of - date(y, m, d)).days
+        amount = round(bill.get("amountDue") or 0, 2)
+        vendor = vendor_label(bill)
+        lane = "check" if vendor in CHECK_VENDORS else "pay"
+        return {
+            "number": bill.get("number") or "",
+            "vendor": vendor,
+            "what": what_label(bill),
+            "due": due,
+            "days": days if days is not None else 0,
+            "amount": amount,
+            "currency": bill.get("currency") or "EUR",
+            "lane": lane,
+            "score": max(days or 0, 0) * amount,
+        }
+
+    packed = [pack(bill) for bill in bills]
+    packed.sort(key=lambda item: -item["score"])
+    charge = stripe["charge"]
+    payload = {
+        "asOf": as_of.isoformat(),
+        "billsGeneratedAt": bills_payload["generatedAt"],
+        "stripeGeneratedAt": stripe["generatedAt"],
+        "bills": packed,
+        "stripe": {
+            "gross": round(charge["gross"], 2),
+            "fee": round(charge["fee"], 2),
+            "refund": round(stripe["refund"]["net"], 2),
+            "net": round(stripe["net"], 2),
+        },
+    }
+    raw = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
+    html = DESK_PAGE.replace("__DATA__", raw)
     api = ROOT / "api"
     api.mkdir(exist_ok=True)
     (api / "books.js").write_text(
@@ -365,12 +487,16 @@ def build():
         "  res.statusCode = 200;\n"
         '  res.setHeader("Content-Type", "text/html; charset=utf-8");\n'
         '  res.setHeader("Cache-Control", "private, no-store");\n'
+        '  res.setHeader("X-Content-Type-Options", "nosniff");\n'
+        '  res.setHeader("X-Frame-Options", "DENY");\n'
+        '  res.setHeader("Referrer-Policy", "no-referrer");\n'
         "  res.end(html);\n"
         "};\n"
     )
     OUT.write_text(LOGIN_PAGE)
+    pay = [item for item in packed if item["lane"] == "pay"]
     print("wrote", OUT, "and", api / "books.js")
-    print("eur", eur_due, "usd", usd_due, "stripe gross", round(charge["gross"], 2), "net", round(stripe["net"], 2))
+    print("pay", len(pay), "check", len(packed) - len(pay), "first", pay[0]["vendor"] if pay else None)
 
 
 if __name__ == "__main__":

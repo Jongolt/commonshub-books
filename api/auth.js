@@ -14,9 +14,8 @@ function cookie(req, name) {
 }
 
 function safeEqual(left, right) {
-  const a = Buffer.from(String(left));
-  const b = Buffer.from(String(right));
-  if (a.length !== b.length) return false;
+  const a = crypto.createHash("sha256").update(String(left), "utf8").digest();
+  const b = crypto.createHash("sha256").update(String(right), "utf8").digest();
   return crypto.timingSafeEqual(a, b);
 }
 
@@ -56,9 +55,18 @@ function readSession(req) {
   return payload;
 }
 
-function sessionCookie(username) {
+function sessionCookie(username, secure) {
   const token = sign({ u: username, exp: Date.now() + 12 * 60 * 60 * 1000 });
-  return `chb_session=${token}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=43200`;
+  const locked = secure ? "; Secure" : "";
+  return `chb_session=${token}; HttpOnly${locked}; Path=/; SameSite=Lax; Max-Age=43200`;
 }
 
-module.exports = { readSession, checkPassword, sessionCookie };
+function notFound(req, res) {
+  res.statusCode = 404;
+  res.end();
+}
+
+notFound.readSession = readSession;
+notFound.checkPassword = checkPassword;
+notFound.sessionCookie = sessionCookie;
+module.exports = notFound;
