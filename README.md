@@ -10,6 +10,14 @@ Proximus and KBC stay in Check first. A direct debit can already have left, and 
 
 Private individuals are not named.
 
+## Stripe
+
+Two things here are Stripe.
+
+The hosting. The Vercel plan and project were provisioned with the Stripe Projects CLI, not by hand. `stripe projects add vercel/hobby` then `stripe projects add vercel/project`. The stack is at [projects.dev/s#v1:Vercel~project](https://projects.dev/s#v1:Vercel~project). `.projects/state.json` is the Stripe Projects record of that stack. Credentials stay in the ignored `.env` and vault.
+
+The card book. The desk shows what came into the Hub through Stripe from January 2024 through October 2026: gross charges, Stripe fees, refunds, and what is left. These are the Hub's public Stripe rows from the open data, not a new payment flow. They are shown apart from the bills on purpose, because incoming card money does not close a vendor bill.
+
 ## Data
 
 The numbers come from the public read-only API at [commonshub.brussels/opendata](https://commonshub.brussels/opendata). No key is required. The dataset is under the Open Database License (ODbL).

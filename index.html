@@ -20,6 +20,8 @@
   button:active { transform: scale(0.98); }
   button:disabled { opacity: 0.6; cursor: wait; }
   .err { min-height: 1.45em; margin: 0; color: #8a3a1e; font-size: 14px; }
+  .built { margin: 24px 0 0; color: #3e4856; font-size: 13px; }
+  .built a { color: inherit; }
   ::selection { background: #d5e0ec; color: #14181f; }
   @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
@@ -38,6 +40,7 @@
     <button type="submit">Sign in</button>
     <p class="err" id="err" hidden>That username or password is wrong.</p>
   </form>
+  <p class="built">Built with <a href="https://projects.dev/s#v1:Vercel~project">Stripe Projects</a>. Hosted on Vercel. Books from <a href="https://commonshub.brussels/opendata">Commons Hub open data</a>.</p>
 </main>
 <script>
   const form = document.getElementById("in");

@@ -39,6 +39,8 @@ LOGIN_PAGE = """<!DOCTYPE html>
   button:active { transform: scale(0.98); }
   button:disabled { opacity: 0.6; cursor: wait; }
   .err { min-height: 1.45em; margin: 0; color: #8a3a1e; font-size: 14px; }
+  .built { margin: 24px 0 0; color: #3e4856; font-size: 13px; }
+  .built a { color: inherit; }
   ::selection { background: #d5e0ec; color: #14181f; }
   @media (prefers-reduced-motion: reduce) { button:active { transform: none; } }
 </style>
@@ -57,6 +59,7 @@ LOGIN_PAGE = """<!DOCTYPE html>
     <button type="submit">Sign in</button>
     <p class="err" id="err" hidden>That username or password is wrong.</p>
   </form>
+  <p class="built">Built with <a href="https://projects.dev/s#v1:Vercel~project">Stripe Projects</a>. Hosted on Vercel. Books from <a href="https://commonshub.brussels/opendata">Commons Hub open data</a>.</p>
 </main>
 <script>
   const form = document.getElementById("in");
@@ -212,7 +215,8 @@ DESK_PAGE = """<!DOCTYPE html>
   header { display: flex; align-items: baseline; gap: 16px; padding: 20px 24px 0; }
   header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
   header p { margin: 0; color: var(--muted); font-size: 14px; }
-  header .out { margin-left: auto; font-size: 14px; }
+  header .stack { margin-left: auto; font-size: 14px; color: var(--action); }
+  header .out { font-size: 14px; }
   .desk { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 420px); gap: 20px; padding: 20px 24px 48px; align-items: start; }
   .queue, .slip, .cardbook { background: var(--paper); border: 1px solid var(--line); }
   .queue { min-height: 420px; }
@@ -266,6 +270,7 @@ DESK_PAGE = """<!DOCTYPE html>
 <header>
   <h1>Commons Hub books</h1>
   <p id="asof"></p>
+  <a class="stack" href="https://projects.dev/s#v1:Vercel~project">Built with Stripe Projects</a>
   <a class="out" href="/api/logout">Sign out</a>
 </header>
 <div class="desk">
@@ -460,8 +465,8 @@ renderList();
 
 const stripe = data.stripe;
 document.getElementById("cardbook").innerHTML =
-  "<h2>Card book</h2>" +
-  "<p>Public Stripe charges from January 2024 through October 2026. Payouts to the bank are the same money leaving Stripe, so they are not counted again. This money does not close the bills on the desk.</p>" +
+  "<h2>Stripe card book</h2>" +
+  "<p>What came into the Hub through Stripe from January 2024 through October 2026, from the public open data. Payouts to the bank are the same money leaving Stripe, so they are not counted again. This money does not close the bills on the desk.</p>" +
   "<div class='totals'>" +
   "<div><span>Gross</span>" + money(stripe.gross, "EUR") + "</div>" +
   "<div><span>Fees</span>" + money(stripe.fee, "EUR") + "</div>" +
@@ -470,7 +475,8 @@ document.getElementById("cardbook").innerHTML =
   "</div>";
 document.getElementById("foot").innerHTML =
   "Contains data from Commons Hub Brussels, available under the Open Database License (ODbL): <a href='https://commonshub.brussels/opendata'>commonshub.brussels/opendata</a>. Bills generated at " +
-  escapeHtml(data.billsGeneratedAt) + ". Stripe rows generated at " + escapeHtml(data.stripeGeneratedAt) + ".";
+  escapeHtml(data.billsGeneratedAt) + ". Stripe rows generated at " + escapeHtml(data.stripeGeneratedAt) + ". " +
+  "Built with <a href='https://projects.dev/s#v1:Vercel~project'>Stripe Projects</a>, hosted on Vercel.";
 </script>
 </body>
 </html>
